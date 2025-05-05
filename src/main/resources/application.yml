@@ -1,0 +1,38 @@
+server:
+  port: 4000
+
+spring:
+  h2:
+    console:
+      path: /h2-console
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: admin
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  redis:
+    host: localhost
+    port: 6379
+
+jwt:
+  secret: 51015d92267ac92bbeb60b3a6306a613bdfaa48e9bc63300ff8efc5b1457675ea318da25f7bcec00a1a2d7b85f92ba52419085e466718d90542be71aa7ce7fe100ca4012a5cccfe8d2c9a0273701ad51698c3fd317bcefb51aff097aec3b6188b95994eb4aff64f4a78a7cd1c55a93f2793a1262a72fd01cf2ae3df3f201216d74188f8f555450de0fc8f9ba16b91e924f8cac6df446bb1d86d7213a89000e343ccef353ea569efc12f0f6091916aa2a1953731631fe98e09a825737e8dba1ae6e2be43d4fcb5d32d8abda66899fc2f67b85f9bc3660de4dd8ce1e0baaeb921cabc507cff1748decf1a45e7ddf94f3edcce16eeacadb355c0d11da9f856eb2f5
+  expiration: 86400000 # 24 hours in milliseconds
+
+logging:
+  level:
+    org.springframework.web: DEBUG
+    com.richard.activitytracker: DEBUG
+    com.richard.activitytracker.handler: TRACE
+    org.springframework.http.converter.json: DEBUG 

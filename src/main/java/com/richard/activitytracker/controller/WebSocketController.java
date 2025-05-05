@@ -1,0 +1,58 @@
+package com.richard.activitytracker.controller;
+
+import com.richard.activitytracker.dto.ActivityResponse;
+import com.richard.activitytracker.service.ActivityService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.annotation.SubscribeMapping;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Controller;
+
+import java.util.List;
+
+@Slf4j
+@Controller
+@RequiredArgsConstructor
+public class WebSocketController {
+    private final ActivityService activityService;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    @MessageMapping("/activities")
+    @SendTo("/topic/activities")
+    public ActivityResponse handleActivity(ActivityResponse activity) {
+        log.info("Received activity via WebSocket: {}", activity);
+        messagingTemplate.convertAndSend("/queue/activities", activity);
+        return activity;
+    }
+
+    @SubscribeMapping("/topic/activities")
+    public List<ActivityResponse> handleActivitySubscription() {
+        log.info("New subscription to activities topic");
+        return activityService.getAllActivities();
+    }
+
+    @MessageMapping("/user/activities")
+    public void handleUserActivity(ActivityResponse activity) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null) {
+            String username = auth.getName();
+            log.info("Received user activity from {}: {}", username, activity);
+            messagingTemplate.convertAndSendToUser(username, "/queue/activities", activity);
+        }
+    }
+
+    @SubscribeMapping("/user/queue/activities")
+    public List<ActivityResponse> handleUserActivitySubscription() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null) {
+            String username = auth.getName();
+            log.info("New subscription to user activities queue for user: {}", username);
+            return activityService.getAllActivities();
+        }
+        return List.of();
+    }
+} 
