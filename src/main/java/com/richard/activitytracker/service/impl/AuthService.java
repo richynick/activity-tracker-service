@@ -3,8 +3,8 @@ package com.richard.activitytracker.service.impl;
 import com.richard.activitytracker.dto.AuthRequest;
 import com.richard.activitytracker.dto.AuthResponse;
 import com.richard.activitytracker.dto.RegisterRequest;
+import com.richard.activitytracker.exception.AuthenticationException;
 import com.richard.activitytracker.exception.TokenGenerationException;
-import com.richard.activitytracker.handler.ErrorResponse;
 import com.richard.activitytracker.model.User;
 import com.richard.activitytracker.repository.UserRepository;
 import com.richard.activitytracker.security.JwtService;
@@ -13,7 +13,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -42,10 +41,20 @@ public class AuthService {
         try {
             if (userRepository.existsByUsername(request.getUsername())) {
                 log.warn("Registration failed - username already exists: {}", request.getUsername());
-                throw new IllegalArgumentException(format("User with username %s already exists", request.getUsername()));
+                throw new AuthenticationException(
+                    format("User with username %s already exists", request.getUsername()),
+                    "Registration failed",
+                    HttpStatus.CONFLICT.value(),
+                    "/api/auth/register"
+                );
             } else if (userRepository.existsByEmail(request.getEmail())) {
                 log.warn("Registration failed - email already exists: {}", request.getEmail());
-                throw new IllegalArgumentException(format("User with email %s already exists", request.getEmail()));
+                throw new AuthenticationException(
+                    format("User with email %s already exists", request.getEmail()),
+                    "Registration failed",
+                    HttpStatus.CONFLICT.value(),
+                    "/api/auth/register"
+                );
             }
 
             User user = new User();
@@ -64,7 +73,7 @@ public class AuthService {
                 log.error("Token generation failed for user: {}", user.getUsername(), e);
                 throw new TokenGenerationException("Failed to generate authentication token", e);
             }
-        } catch (IllegalArgumentException e) {
+        } catch (AuthenticationException e) {
             log.error("Registration failed: {}", e.getMessage());
             throw e;
         } catch (Exception e) {
@@ -73,7 +82,7 @@ public class AuthService {
         }
     }
 
-    public ResponseEntity<?> login(AuthRequest request) {
+    public AuthResponse login(AuthRequest request) {
         try {
             authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
@@ -85,51 +94,42 @@ public class AuthService {
             User user = userRepository.findByUsername(request.getUsername())
                     .orElseThrow(() -> {
                         log.error("Login failed - user not found: {}", request.getUsername());
-                        return new BadCredentialsException("Invalid username or password");
+                        throw new AuthenticationException(
+                            "Invalid username or password",
+                            "Authentication failed",
+                            UNAUTHORIZED.value(),
+                            getCurrentRequestPath()
+                        );
                     });
             
             log.info("User authenticated successfully: {}", user.getUsername());
             
             try {
                 String jwtToken = jwtService.generateToken(user);
-                return ResponseEntity.ok(new AuthResponse(jwtToken));
+                return new AuthResponse(jwtToken);
             } catch (Exception e) {
                 log.error("Token generation failed for user: {}", user.getUsername(), e);
                 throw new TokenGenerationException("Failed to generate authentication token", e);
             }
         } catch (BadCredentialsException e) {
             log.warn("Login failed - invalid credentials for user: {}", request.getUsername());
-            return ResponseEntity.status(UNAUTHORIZED)
-                    .body(new ErrorResponse(
-                            "Invalid username or password",
-                            "Authentication failed",
-                            UNAUTHORIZED.value(),
-                            getCurrentRequestPath()
-                    ));
-        } catch (ExpiredJwtException e) {
-            log.warn("Login failed - token expired: {}", e.getMessage());
-            Map<String, String> details = new HashMap<>();
-            details.put("expiredAt", e.getClaims().getExpiration().toString());
-            details.put("currentTime", e.getMessage().split("Current time: ")[1].split(",")[0]);
-            details.put("difference", e.getMessage().split("difference of ")[1].split(" milliseconds")[0] + " milliseconds");
-            
-            return ResponseEntity.status(UNAUTHORIZED)
-                    .body(new ErrorResponse(
-                            "Your session has expired. Please log in again.",
-                            "Token expired",
-                            UNAUTHORIZED.value(),
-                            getCurrentRequestPath(),
-                            details
-                    ));
+            throw new AuthenticationException(
+                "Invalid username or password",
+                "Authentication failed",
+                UNAUTHORIZED.value(),
+                getCurrentRequestPath()
+            );
+        } catch (TokenGenerationException e) {
+            log.error("Token generation failed: {}", e.getMessage());
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error during login: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ErrorResponse(
-                            "Login failed due to an unexpected error",
-                            "Internal server error",
-                            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                            getCurrentRequestPath()
-                    ));
+            throw new AuthenticationException(
+                "Invalid username or password",
+                "Authentication failed",
+                UNAUTHORIZED.value(),
+                getCurrentRequestPath()
+            );
         }
     }
 

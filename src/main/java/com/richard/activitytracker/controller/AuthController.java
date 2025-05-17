@@ -3,6 +3,7 @@ package com.richard.activitytracker.controller;
 import com.richard.activitytracker.dto.AuthRequest;
 import com.richard.activitytracker.dto.AuthResponse;
 import com.richard.activitytracker.dto.RegisterRequest;
+import com.richard.activitytracker.exception.AuthenticationException;
 import com.richard.activitytracker.handler.ErrorResponse;
 import com.richard.activitytracker.service.impl.AuthService;
 import jakarta.validation.Valid;
@@ -27,6 +28,18 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody @Valid AuthRequest request) {
-        return authService.login(request);
+        try {
+            AuthResponse response = authService.login(request);
+            return ResponseEntity.ok(response);
+        } catch (AuthenticationException e) {
+            return ResponseEntity.status(e.getStatus())
+                    .body(new ErrorResponse(
+                            e.getMessage(),
+                            e.getError(),
+                            e.getStatus(),
+                            e.getPath(),
+                            e.getDetails()
+                    ));
+        }
     }
 } 
