@@ -4,6 +4,9 @@ import com.richard.activitytracker.dto.ActivityResponse;
 import com.richard.activitytracker.service.ActivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -23,16 +26,17 @@ public class WebSocketController {
 
     @MessageMapping("/activities")
     @SendTo("/topic/activities")
-    public ActivityResponse handleActivity(ActivityResponse activity) {
-        log.info("Received activity via WebSocket: {}", activity);
-        messagingTemplate.convertAndSend("/queue/activities", activity);
-        return activity;
+    public List<ActivityResponse> getActivities() {
+        log.info("Received request for activities");
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("timestamp").descending());
+        return activityService.getAllActivities(pageable).getContent();
     }
 
     @SubscribeMapping("/topic/activities")
     public List<ActivityResponse> handleActivitySubscription() {
         log.info("New subscription to activities topic");
-        return activityService.getAllActivities();
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("timestamp").descending());
+        return activityService.getAllActivities(pageable).getContent();
     }
 
     @MessageMapping("/user/activities")
@@ -51,7 +55,8 @@ public class WebSocketController {
         if (auth != null) {
             String username = auth.getName();
             log.info("New subscription to user activities queue for user: {}", username);
-            return activityService.getAllActivities();
+            Pageable pageable = PageRequest.of(0, 10, Sort.by("timestamp").descending());
+            return activityService.getAllActivities(pageable).getContent();
         }
         return List.of();
     }

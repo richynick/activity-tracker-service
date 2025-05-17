@@ -13,9 +13,9 @@ import java.util.List;
 
 public interface ActivityService {
     ActivityResponse logActivity(Long userId, ActivityRequest request);
-    ActivityResponse getRecentActivities();
-    ResponseEntity<?> getActivitiesByUserId(Long userId, Pageable pageable);
-    ResponseEntity<?> searchActivities(Long userId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
-    ActivityResponse createActivity(ActivityRequest activityRequest);
-    List<ActivityResponse> getAllActivities();
+    Page<ActivityResponse> getRecentActivities(Pageable pageable);
+    Page<ActivityResponse> getActivitiesByUserId(Long userId, Pageable pageable);
+    Page<ActivityResponse> searchActivities(Long userId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable);
+    ActivityResponse createActivity(Long userId, String action, String details);
+    Page<ActivityResponse> getAllActivities(Pageable pageable);
 } 
