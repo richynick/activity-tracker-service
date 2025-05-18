@@ -4,6 +4,9 @@ import com.richard.activitytracker.service.ActivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -37,7 +40,8 @@ public class WebSocketEventListener {
 
     private void sendInitialActivities(String sessionId) {
         log.info("Sending initial activities to session: {}", sessionId);
-        var activities = activityService.getAllActivities();
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("timestamp").descending());
+        var activities = activityService.getAllActivities(pageable).getContent();
         log.info("Found {} activities to send", activities.size());
         messagingTemplate.convertAndSendToUser(sessionId, "/queue/activities", activities);
     }

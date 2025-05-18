@@ -16,8 +16,6 @@ A real-time user activity tracking system built with Spring Boot and React.
 - Java 17 or higher
 - Maven 3.8 or higher
 - Redis 6 or higher
-- Node.js 16 or higher
-- npm 8 or higher
 
 ## Backend Setup
 
@@ -27,12 +25,8 @@ git clone https://github.com/yourusername/activity-tracker.git
 cd activity-tracker
 ```
 
-2. Create a PostgreSQL database named `activity_tracker`
-
-3. Update the database credentials in `src/main/resources/application.yml` if needed
-
-4. Build and run the backend:
-```bash
+2Build and run the backend:
+```bash 
 mvn clean install
 mvn spring-boot:run
 ```

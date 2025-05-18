@@ -5,6 +5,9 @@ import lombok.Data;
 
 @Data
 public class ActivityRequest {
+
+    private Long userId;
+
     @NotBlank(message = "Action is required")
     private String action;
     

@@ -74,122 +74,68 @@ public class ActivityServiceImpl implements ActivityService {
 
     @Override
     @Cacheable(value = "recentActivities", key = "#pageable.pageNumber")
-    public ActivityResponse getRecentActivities() {
-        try {
-            Pageable pageable = PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "timestamp"));
-            Page<Activity> activities = activityRepository.findAll(pageable);
-            if (activities.hasContent()) {
-                Activity recentActivity = activities.getContent().get(0);
-                ActivityResponse response = convertToResponse(recentActivity);
-                log.info("Retrieved most recent activity: {}", response.getId());
-                return response;
-            } else {
-                log.warn("No activities found");
-                return null; // Or throw an exception, or handle as you wish
-            }
-        } catch (Exception e) {
-            log.error("Failed to retrieve recent activity: {}", e.getMessage(), e);
-            return null; // Or throw an exception, or handle as you wish
-        }
+    public Page<ActivityResponse> getRecentActivities(Pageable pageable) {
+        Page<Activity> activities = activityRepository.findAll(PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("timestamp").descending()));
+        return activities.map(this::convertToResponse);
+
     }
 
     @Override
     @Cacheable(value = "userActivities", key = "#userId + '-' + #pageable.pageNumber")
-    public ResponseEntity<?> getActivitiesByUserId(Long userId, Pageable pageable) {
-        try {
-            if (!userRepository.existsById(userId)) {
-                log.error("User not found: {}", userId);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new ErrorResponse(
-                                "User with ID " + userId + " not found",
-                                "User not found",
-                                HttpStatus.NOT_FOUND.value(),
-                                getCurrentRequestPath()
-                        ));
-            }
-
-            Page<ActivityResponse> activities = activityRepository.findByUserId(userId, pageable)
-                    .map(this::convertToResponse);
-            log.info("Retrieved {} activities for user {}", activities.getTotalElements(), userId);
-            return ResponseEntity.ok(activities);
-        } catch (Exception e) {
-            log.error("Failed to retrieve activities for user {}: {}", userId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ErrorResponse(
-                            "Failed to retrieve user activities",
-                            "Internal server error",
-                            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                            getCurrentRequestPath()
-                    ));
+    public Page<ActivityResponse> getActivitiesByUserId(Long userId, Pageable pageable) {
+        if (!userRepository.existsById(userId)) {
+            log.error("User not found: {}", userId);
+            throw new UserNotFoundException("User with ID " + userId + " not found");
         }
+
+        return activityRepository.findByUserId(userId, pageable)
+                .map(this::convertToResponse);
+
     }
 
     @Override
     @Cacheable(value = "searchActivities", key = "#userId + '-' + #startTime + '-' + #endTime + '-' + #pageable.pageNumber")
-    public ResponseEntity<?> searchActivities(Long userId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable) {
-        try {
-            if (userId != null && !userRepository.existsById(userId)) {
-                log.error("User not found: {}", userId);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new ErrorResponse(
-                                "User with ID " + userId + " not found",
-                                "User not found",
-                                HttpStatus.NOT_FOUND.value(),
-                                getCurrentRequestPath()
-                        ));
-            }
+    public Page<ActivityResponse> searchActivities(Long userId, LocalDateTime startTime, LocalDateTime endTime, Pageable pageable) {
+        if (userId != null && !userRepository.existsById(userId)) {
+            log.error("User not found: {}", userId);
+            throw new UserNotFoundException("User with ID " + userId + " not found");
+        }
 
-            Page<ActivityResponse> activities;
-            if (userId != null) {
-                activities = activityRepository.findByUserIdAndTimestampBetween(userId, startTime, endTime, pageable)
-                        .map(this::convertToResponse);
-            } else {
-                activities = activityRepository.findByTimestampBetween(startTime, endTime, pageable)
-                        .map(this::convertToResponse);
-            }
-            
-            log.info("Retrieved {} activities for search criteria", activities.getTotalElements());
-            return ResponseEntity.ok(activities);
-        } catch (Exception e) {
-            log.error("Failed to search activities: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ErrorResponse(
-                            "Failed to search activities",
-                            "Internal server error",
-                            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                            getCurrentRequestPath()
-                    ));
+        if (userId != null) {
+            return activityRepository.findByUserIdAndTimestampBetween(userId, startTime, endTime, pageable)
+                    .map(this::convertToResponse);
+        } else {
+            return activityRepository.findByTimestampBetween(startTime, endTime, pageable)
+                    .map(this::convertToResponse);
         }
     }
 
     @Override
     public ActivityResponse createActivity(ActivityRequest activityRequest) {
+        User user = userRepository.findById(activityRequest.getUserId())
+                .orElseThrow(() -> new UserNotFoundException("User with ID " + activityRequest.getUserId() + " not found"));
         Activity activity = Activity.builder()
+                .user(user)
                 .action(activityRequest.getAction())
                 .details(activityRequest.getDetails())
                 .build();
         Activity savedActivity = activityRepository.save(activity);
-        ActivityResponse response = ActivityResponse.builder()
-                .id(savedActivity.getId())
-                .action(savedActivity.getAction())
-                .details(savedActivity.getDetails())
-                .timestamp(savedActivity.getTimestamp())
-                .build();
-        
-        webSocketService.broadcastActivity(response);
+        ActivityResponse response = convertToResponse(savedActivity);
+        try {
+            webSocketService.broadcastActivity(response);
+            log.info("Activity created successfully for user {}: {}", response.getUserId(), response.getAction());
+        } catch (WebSocketException e) {
+            log.error("Failed to broadcast activity: {}", e.getMessage());
+            throw new BroadcastFailedException("Activity created but failed to broadcast", e);
+        }
         return response;
     }
 
     @Override
-    public List<ActivityResponse> getAllActivities() {
-        return activityRepository.findAll().stream()
-                .map(activity -> ActivityResponse.builder()
-                        .id(activity.getId())
-                        .action(activity.getAction())
-                        .details(activity.getDetails())
-                        .timestamp(activity.getTimestamp())
-                        .build())
-                .collect(Collectors.toList());
+    @Cacheable(value = "allActivities", key = "#pageable.pageNumber")
+    public Page<ActivityResponse> getAllActivities(Pageable pageable) {
+        return activityRepository.findAll(pageable)
+                .map(this::convertToResponse);
     }
 
     private ActivityResponse convertToResponse(Activity activity) {
@@ -203,14 +149,8 @@ public class ActivityServiceImpl implements ActivityService {
         return response;
     }
 
-    private String getCurrentRequestPath() {
-        try {
-            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-            return request.getRequestURI();
-        } catch (Exception e) {
-            log.warn("Could not get current request path: {}", e.getMessage());
-            return "/api/activities";
-        }
+    private HttpServletRequest getCurrentHttpRequest() {
+        return ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
     }
 
 } 
