@@ -13,6 +13,8 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
         config.enableSimpleBroker("/topic");
@@ -24,7 +26,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
             .setAllowedOrigins("*")
-                .addInterceptors(new WebSocketAuthInterceptor());
-//            .addInterceptors(webSocketHandshakeInterceptor);
+                .addInterceptors(new WebSocketHandshakeInterceptor(jwtAuthenticationFilter));
+
     }
 } 
